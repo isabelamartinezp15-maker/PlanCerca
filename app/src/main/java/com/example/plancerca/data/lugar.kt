@@ -1,7 +1,7 @@
 package com.example.plancerca.data
 
 data class Lugar(
-    val id: Int,
+    val id: String,
     val nombre: String,
     val categoria: String,
     val direccion: String,

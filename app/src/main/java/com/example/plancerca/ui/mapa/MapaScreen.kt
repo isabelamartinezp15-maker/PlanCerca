@@ -8,13 +8,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.plancerca.R
-import com.example.plancerca.data.lugaresEjemplo
+import com.example.plancerca.data.LugaresRepositorio
 import com.example.plancerca.ui.ubicacion.rememberUbicacion
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -29,7 +30,7 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
 
 @Composable
-fun MapaScreen(onLugarClick: (Int) -> Unit) {
+fun MapaScreen(onLugarClick: (String) -> Unit) {
     val context = LocalContext.current
     val estadoUbicacion = rememberUbicacion()
     val miUbicacion = estadoUbicacion.ubicacion
@@ -38,6 +39,7 @@ fun MapaScreen(onLugarClick: (Int) -> Unit) {
         position = CameraPosition.fromLatLngZoom(LatLng(4.6486, -74.0628), 12f)
     }
 
+    // Mueve la cámara a tu ubicación
     LaunchedEffect(miUbicacion) {
         if (miUbicacion != null) {
             camara.animate(
@@ -45,6 +47,13 @@ fun MapaScreen(onLugarClick: (Int) -> Unit) {
                     LatLng(miUbicacion.latitude, miUbicacion.longitude), 14f
                 )
             )
+        }
+    }
+
+    // Busca los lugares reales cercanos
+    LaunchedEffect(miUbicacion) {
+        if (miUbicacion != null) {
+            LugaresRepositorio.cargarCercanos(context, miUbicacion.latitude, miUbicacion.longitude)
         }
     }
 
@@ -63,16 +72,18 @@ fun MapaScreen(onLugarClick: (Int) -> Unit) {
                 myLocationButtonEnabled = estadoUbicacion.tienePermiso
             )
         ) {
-            lugaresEjemplo.forEach { lugar ->
-                Marker(
-                    state = rememberMarkerState(
-                        position = LatLng(lugar.latitud, lugar.longitud)
-                    ),
-                    title = lugar.nombre,
-                    snippet = "${lugar.categoria} · toca para ver más",
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE),
-                    onInfoWindowClick = { onLugarClick(lugar.id) }
-                )
+            LugaresRepositorio.lugares.forEach { lugar ->
+                key(lugar.id) {
+                    Marker(
+                        state = rememberMarkerState(
+                            position = LatLng(lugar.latitud, lugar.longitud)
+                        ),
+                        title = lugar.nombre,
+                        snippet = "${lugar.categoria} · toca para ver más",
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE),
+                        onInfoWindowClick = { onLugarClick(lugar.id) }
+                    )
+                }
             }
         }
 
@@ -89,4 +100,3 @@ fun MapaScreen(onLugarClick: (Int) -> Unit) {
         }
     }
 }
-

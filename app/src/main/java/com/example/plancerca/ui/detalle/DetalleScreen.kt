@@ -40,11 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.example.plancerca.data.Lugar
-import com.example.plancerca.data.lugaresEjemplo
+import com.example.plancerca.data.LugaresRepositorio
 
 @Composable
-fun DetalleScreen(lugarId: Int, onBack: () -> Unit) {
-    val lugar = lugaresEjemplo.firstOrNull { it.id == lugarId }
+fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
+    val lugar = LugaresRepositorio.lugares.firstOrNull { it.id == lugarId }
     val context = LocalContext.current
 
     if (lugar == null) {
@@ -57,9 +57,14 @@ fun DetalleScreen(lugarId: Int, onBack: () -> Unit) {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            Box(modifier = Modifier.fillMaxWidth().height(320.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp)
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
+            ) {
                 AsyncImage(
-                    model = lugar.imagenUrl,
+                    model = lugar.imagenUrl.ifBlank { null },
                     contentDescription = lugar.nombre,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

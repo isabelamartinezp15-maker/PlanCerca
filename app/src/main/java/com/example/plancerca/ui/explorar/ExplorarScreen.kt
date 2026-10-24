@@ -34,6 +34,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,11 +44,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.example.plancerca.data.Lugar
-import com.example.plancerca.data.lugaresEjemplo
+import com.example.plancerca.data.LugaresRepositorio
 import com.example.plancerca.ui.ubicacion.distanciaMetros
 import com.example.plancerca.ui.ubicacion.formatearDistancia
 import com.example.plancerca.ui.ubicacion.rememberUbicacion
@@ -55,16 +57,25 @@ import com.example.plancerca.ui.ubicacion.rememberUbicacion
 private const val TODAS = "Todos"
 
 @Composable
-fun ExplorarScreen(onLugarClick: (Int) -> Unit) {
+fun ExplorarScreen(onLugarClick: (String) -> Unit) {
+    val context = LocalContext.current
     var busqueda by rememberSaveable { mutableStateOf("") }
     var categoriaSeleccionada by rememberSaveable { mutableStateOf(TODAS) }
 
     val estadoUbicacion = rememberUbicacion()
     val miUbicacion = estadoUbicacion.ubicacion
 
-    val categorias = listOf(TODAS) + lugaresEjemplo.map { it.categoria }.distinct()
+    // Cuando llega el GPS, buscamos los lugares reales cercanos
+    LaunchedEffect(miUbicacion) {
+        if (miUbicacion != null) {
+            LugaresRepositorio.cargarCercanos(context, miUbicacion.latitude, miUbicacion.longitude)
+        }
+    }
 
-    val lugaresFiltrados = lugaresEjemplo.filter { lugar ->
+    val lugares = LugaresRepositorio.lugares
+    val categorias = listOf(TODAS) + lugares.map { it.categoria }.distinct()
+
+    val lugaresFiltrados = lugares.filter { lugar ->
         val coincideCategoria = categoriaSeleccionada == TODAS || lugar.categoria == categoriaSeleccionada
         val coincideNombre = lugar.nombre.contains(busqueda.trim(), ignoreCase = true)
         coincideCategoria && coincideNombre
@@ -132,6 +143,25 @@ fun ExplorarScreen(onLugarClick: (Int) -> Unit) {
                     text = "Buscando tu ubicación… revisa que el GPS esté activado",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+        if (LugaresRepositorio.cargando) {
+            item {
+                Text(
+                    text = "Buscando lugares cerca de ti…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+        val aviso = LugaresRepositorio.mensaje
+        if (aviso != null) {
+            item {
+                Text(
+                    text = aviso,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -211,9 +241,13 @@ fun LugarCard(
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
+        ) {
             AsyncImage(
-                model = lugar.imagenUrl,
+                model = lugar.imagenUrl.ifBlank { null },
                 contentDescription = lugar.nombre,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
