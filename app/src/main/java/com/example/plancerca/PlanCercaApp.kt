@@ -24,6 +24,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.example.plancerca.ui.detalle.DetalleScreen
 import com.example.plancerca.ui.explorar.ExplorarScreen
+import com.example.plancerca.ui.mapa.MapaScreen
 
 // Destinos de la app
 data object Explorar
@@ -86,7 +87,9 @@ fun PlanCercaApp() {
                         onBack = { if (backStack.size > 1) backStack.removeLastOrNull() }
                     )
                 }
-                entry<Mapa> { PantallaVacia("Mapa") }
+                entry<Mapa> {
+                    MapaScreen(onLugarClick = { id -> backStack.add(DetalleLugar(id)) })
+                }
                 entry<Favoritos> { PantallaVacia("Favoritos") }
             }
         )
