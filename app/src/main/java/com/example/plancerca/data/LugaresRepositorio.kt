@@ -79,6 +79,8 @@ object LugaresRepositorio {
             "X-Android-Cert" to huellaSha1(context)
         )
 
+        Log.d("PlanCerca", "Enviando paquete=${context.packageName} sha1=${huellaSha1(context)}")
+
         val cuerpo = JSONObject()
             .put("includedTypes", JSONArray(listOf("restaurant", "cafe", "bar", "tourist_attraction")))
             .put("maxResultCount", MAX_RESULTADOS)
