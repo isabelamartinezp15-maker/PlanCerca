@@ -19,7 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -46,6 +48,9 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.example.plancerca.data.Lugar
 import com.example.plancerca.data.lugaresEjemplo
+import com.example.plancerca.ui.ubicacion.distanciaMetros
+import com.example.plancerca.ui.ubicacion.formatearDistancia
+import com.example.plancerca.ui.ubicacion.rememberUbicacion
 
 private const val TODAS = "Todos"
 
@@ -54,12 +59,21 @@ fun ExplorarScreen(onLugarClick: (Int) -> Unit) {
     var busqueda by rememberSaveable { mutableStateOf("") }
     var categoriaSeleccionada by rememberSaveable { mutableStateOf(TODAS) }
 
+    val estadoUbicacion = rememberUbicacion()
+    val miUbicacion = estadoUbicacion.ubicacion
+
     val categorias = listOf(TODAS) + lugaresEjemplo.map { it.categoria }.distinct()
 
     val lugaresFiltrados = lugaresEjemplo.filter { lugar ->
         val coincideCategoria = categoriaSeleccionada == TODAS || lugar.categoria == categoriaSeleccionada
         val coincideNombre = lugar.nombre.contains(busqueda.trim(), ignoreCase = true)
         coincideCategoria && coincideNombre
+    }
+
+    val lugaresOrdenados = if (miUbicacion != null) {
+        lugaresFiltrados.sortedBy { distanciaMetros(miUbicacion, it) }
+    } else {
+        lugaresFiltrados
     }
 
     LazyColumn(
@@ -76,8 +90,47 @@ fun ExplorarScreen(onLugarClick: (Int) -> Unit) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Lugares cerca de ti",
+                    text = if (miUbicacion != null) "Ordenados por cercanía" else "Lugares cerca de ti",
                     style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+        if (!estadoUbicacion.tienePermiso) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Activa tu ubicación para ver los lugares más cercanos",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Button(onClick = estadoUbicacion.solicitarPermiso) {
+                            Text("Activar")
+                        }
+                    }
+                }
+            }
+        } else if (miUbicacion == null) {
+            item {
+                Text(
+                    text = "Buscando tu ubicación… revisa que el GPS esté activado",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
@@ -119,7 +172,7 @@ fun ExplorarScreen(onLugarClick: (Int) -> Unit) {
                 }
             }
         }
-        if (lugaresFiltrados.isEmpty()) {
+        if (lugaresOrdenados.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
@@ -133,15 +186,25 @@ fun ExplorarScreen(onLugarClick: (Int) -> Unit) {
                 }
             }
         } else {
-            items(lugaresFiltrados, key = { it.id }) { lugar ->
-                LugarCard(lugar, onClick = { onLugarClick(lugar.id) })
+            items(lugaresOrdenados, key = { it.id }) { lugar ->
+                val distancia = miUbicacion?.let { formatearDistancia(distanciaMetros(it, lugar)) }
+                LugarCard(
+                    lugar = lugar,
+                    distancia = distancia,
+                    onClick = { onLugarClick(lugar.id) }
+                )
             }
         }
     }
 }
 
 @Composable
-fun LugarCard(lugar: Lugar, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun LugarCard(
+    lugar: Lugar,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    distancia: String? = null
+) {
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().height(260.dp),
@@ -167,16 +230,29 @@ fun LugarCard(lugar: Lugar, onClick: () -> Unit, modifier: Modifier = Modifier) 
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiary,
-                    shape = RoundedCornerShape(50)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = lugar.categoria,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiary,
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text(
+                            text = lugar.categoria,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    if (distancia != null) {
+                        Text(
+                            text = "a $distancia",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
                 Text(
                     text = lugar.nombre,
