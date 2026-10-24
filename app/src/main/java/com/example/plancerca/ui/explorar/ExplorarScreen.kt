@@ -50,7 +50,7 @@ import com.example.plancerca.data.lugaresEjemplo
 private const val TODAS = "Todos"
 
 @Composable
-fun ExplorarScreen() {
+fun ExplorarScreen(onLugarClick: (Int) -> Unit) {
     var busqueda by rememberSaveable { mutableStateOf("") }
     var categoriaSeleccionada by rememberSaveable { mutableStateOf(TODAS) }
 
@@ -134,15 +134,16 @@ fun ExplorarScreen() {
             }
         } else {
             items(lugaresFiltrados, key = { it.id }) { lugar ->
-                LugarCard(lugar)
+                LugarCard(lugar, onClick = { onLugarClick(lugar.id) })
             }
         }
     }
 }
 
 @Composable
-fun LugarCard(lugar: Lugar, modifier: Modifier = Modifier) {
+fun LugarCard(lugar: Lugar, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(
+        onClick = onClick,
         modifier = modifier.fillMaxWidth().height(260.dp),
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
