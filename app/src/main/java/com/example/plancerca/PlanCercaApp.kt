@@ -30,7 +30,9 @@ import com.example.plancerca.ui.mapa.MapaScreen
 data object Explorar
 data object Mapa
 data object Favoritos
-data class DetalleLugar(val lugarId: Int)
+
+// El ID ahora es texto, porque así lo identifica Google Places
+data class DetalleLugar(val lugarId: String)
 
 private data class Pestana(
     val destino: Any,
