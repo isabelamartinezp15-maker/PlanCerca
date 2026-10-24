@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import com.example.plancerca.ui.explorar.ExplorarScreen
 
 // Destinos de la app
 data object Explorar
@@ -73,7 +74,7 @@ fun PlanCercaApp() {
             backStack = backStack,
             onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
             entryProvider = entryProvider {
-                entry<Explorar> { PantallaVacia("Explorar") }
+                entry<Explorar> { ExplorarScreen() }
                 entry<Mapa> { PantallaVacia("Mapa") }
                 entry<Favoritos> { PantallaVacia("Favoritos") }
             }
