@@ -20,7 +20,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // NUEVO: lee la clave de Google desde local.properties (no se sube a GitHub)
+        // Lee la clave de Google desde local.properties (no se sube a GitHub)
         val localProps = Properties()
         val localFile = rootProject.file("local.properties")
         if (localFile.exists()) {
@@ -39,6 +39,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // NUEVO: lo exige el SDK de Places
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         compose = true
@@ -74,7 +76,14 @@ dependencies {
     // Ubicación (GPS)
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
-    // NUEVO: mapa de Google Maps
+    // Mapa de Google Maps
     implementation("com.google.maps.android:maps-compose:8.3.0")
 
+    // NUEVO: SDK nativo de Places y soporte de Java 8
+    implementation("com.google.android.libraries.places:places:4.3.1")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // Places SDK nativo y soporte de Java 8
+    implementation("com.google.android.libraries.places:places:4.3.1")
+    implementation("com.google.android.material:material:1.12.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
