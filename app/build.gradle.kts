@@ -54,4 +54,6 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-" + "compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.navigation3:navigation3-runtime:1.1.4")
+    implementation("androidx.navigation3:navigation3-ui:1.1.4")
 }
