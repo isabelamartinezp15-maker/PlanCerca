@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -21,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.example.plancerca.data.FavoritosRepositorio
+import com.example.plancerca.data.ResenasRepositorio
 import com.example.plancerca.ui.detalle.DetalleScreen
 import com.example.plancerca.ui.explorar.ExplorarScreen
 import com.example.plancerca.ui.favoritos.FavoritosScreen
@@ -47,9 +49,12 @@ private val pestanas = listOf(
 
 @Composable
 fun PlanCercaApp() {
-    // Carga los favoritos guardados en el celular
+    // Carga los favoritos y las reseñas guardados en el celular
     val context = LocalContext.current
-    remember(context) { FavoritosRepositorio.iniciar(context) }
+    LaunchedEffect(context) {
+        FavoritosRepositorio.iniciar(context)
+        ResenasRepositorio.iniciar(context)
+    }
 
     val backStack = remember { mutableStateListOf<Any>(Explorar) }
 

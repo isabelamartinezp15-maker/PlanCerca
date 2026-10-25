@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,10 +27,12 @@ import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +53,7 @@ import coil3.compose.AsyncImage
 import com.example.plancerca.data.FavoritosRepositorio
 import com.example.plancerca.data.Lugar
 import com.example.plancerca.data.LugaresRepositorio
+import com.example.plancerca.data.ResenasRepositorio
 
 @Composable
 fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
@@ -64,6 +69,8 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
         }
     } else {
         val esFavorito = FavoritosRepositorio.esFavorito(lugar.id)
+        val resenas = ResenasRepositorio.deLugar(lugar.id)
+        var mostrarFormulario by rememberSaveable { mutableStateOf(false) }
 
         // Los lugares del mapa no traen foto: se pide al abrir el detalle
         var foto by remember(lugar.id) { mutableStateOf(lugar.imagenUrl) }
@@ -167,7 +174,59 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Cómo llegar")
                 }
+                OutlinedButton(
+                    onClick = { mostrarFormulario = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Icon(Icons.Default.RateReview, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Dejar reseña")
+                }
+
+                Text(
+                    text = "Reseñas (${resenas.size})",
+                    modifier = Modifier.padding(top = 32.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Las reseñas se guardan en este celular",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                if (resenas.isEmpty()) {
+                    Text(
+                        text = "Aún no hay reseñas. ¡Sé la primera en opinar!",
+                        modifier = Modifier.padding(top = 12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        resenas.forEach { resena ->
+                            TarjetaResena(
+                                resena = resena,
+                                alEliminar = { ResenasRepositorio.eliminar(resena) }
+                            )
+                        }
+                    }
+                }
             }
+        }
+
+        if (mostrarFormulario) {
+            FormularioResena(
+                lugarId = lugar.id,
+                alCerrar = { mostrarFormulario = false }
+            )
         }
     }
 }
