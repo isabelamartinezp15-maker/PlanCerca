@@ -31,6 +31,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,7 +49,9 @@ import com.example.plancerca.data.LugaresRepositorio
 
 @Composable
 fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
+    // Busca el lugar en Explorar y, si no está, en los lugares del Mapa
     val lugar = LugaresRepositorio.lugares.firstOrNull { it.id == lugarId }
+        ?: LugaresRepositorio.lugaresMapa.firstOrNull { it.id == lugarId }
     val context = LocalContext.current
 
     if (lugar == null) {
@@ -52,6 +59,14 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
             Text("No encontramos este lugar", color = MaterialTheme.colorScheme.primary)
         }
     } else {
+        // Los lugares del mapa no traen foto: se pide al abrir el detalle
+        var foto by remember(lugar.id) { mutableStateOf(lugar.imagenUrl) }
+        LaunchedEffect(lugar.id) {
+            if (foto.isBlank()) {
+                foto = LugaresRepositorio.fotoDe(context, lugar.id)
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -64,7 +79,7 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
                     .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
             ) {
                 AsyncImage(
-                    model = lugar.imagenUrl.ifBlank { null },
+                    model = foto.ifBlank { null },
                     contentDescription = lugar.nombre,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

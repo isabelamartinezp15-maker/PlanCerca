@@ -11,6 +11,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.Task
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.CircularBounds
+import com.google.android.libraries.places.api.model.PhotoMetadata
 import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchResolvedPhotoUriRequest
 import com.google.android.libraries.places.api.net.PlacesClient
@@ -25,9 +26,17 @@ import kotlin.coroutines.resumeWithException
 
 object LugaresRepositorio {
 
+    // Lista de Explorar: los más cercanos a ti
     var lugares by mutableStateOf<List<Lugar>>(lugaresEjemplo)
         private set
+
+    // Lista del Mapa: muchos más lugares, por categoría
+    var lugaresMapa by mutableStateOf<List<Lugar>>(lugaresEjemplo)
+        private set
+
     var cargando by mutableStateOf(false)
+        private set
+    var cargandoMapa by mutableStateOf(false)
         private set
     var mensaje by mutableStateOf<String?>(null)
         private set
@@ -37,8 +46,25 @@ object LugaresRepositorio {
     private var ultimaLon = 0.0
     private var cliente: PlacesClient? = null
 
-    private const val RADIO_METROS = 2000.0
-    private const val MAX_RESULTADOS = 12
+    // Guarda la referencia de la foto de cada lugar para pedirla solo cuando se abre el detalle
+    private val fotos = mutableMapOf<String, PhotoMetadata>()
+
+    private const val RADIO_EXPLORAR_METROS = 2000.0
+    private const val MAX_EXPLORAR = 12
+    private const val RADIO_MAPA_METROS = 2500.0
+    private const val MAX_POR_CATEGORIA = 20
+    private val TIPOS = listOf("restaurant", "cafe", "bar", "tourist_attraction")
+
+    private val CAMPOS = listOf(
+        Place.Field.ID,
+        Place.Field.DISPLAY_NAME,
+        Place.Field.FORMATTED_ADDRESS,
+        Place.Field.LOCATION,
+        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
+        Place.Field.PHOTO_METADATAS
+    )
+
+    // ---------- EXPLORAR: los más cercanos ----------
 
     suspend fun cargarCercanos(context: Context, lat: Double, lon: Double) {
         if (cargando) return
@@ -50,7 +76,7 @@ object LugaresRepositorio {
         cargando = true
         mensaje = null
         try {
-            val nuevos = buscar(context.applicationContext, lat, lon)
+            val nuevos = buscarCercanos(context.applicationContext, lat, lon)
             lugares = nuevos
             datosReales = true
             ultimaLat = lat
@@ -66,31 +92,12 @@ object LugaresRepositorio {
         }
     }
 
-    private fun obtenerCliente(context: Context): PlacesClient {
-        cliente?.let { return it }
-        val clave = leerClave(context)
-        if (clave.isBlank()) throw IllegalStateException("Falta MAPS_API_KEY")
-        if (!Places.isInitialized()) {
-            Places.initializeWithNewPlacesApiEnabled(context, clave)
-        }
-        return Places.createClient(context).also { cliente = it }
-    }
-
-    private suspend fun buscar(context: Context, lat: Double, lon: Double): List<Lugar> {
+    private suspend fun buscarCercanos(context: Context, lat: Double, lon: Double): List<Lugar> {
         val cliente = obtenerCliente(context)
-
-        val campos = listOf(
-            Place.Field.ID,
-            Place.Field.DISPLAY_NAME,
-            Place.Field.FORMATTED_ADDRESS,
-            Place.Field.LOCATION,
-            Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
-            Place.Field.PHOTO_METADATAS
-        )
-        val area = CircularBounds.newInstance(LatLng(lat, lon), RADIO_METROS)
-        val peticion = SearchNearbyRequest.builder(area, campos)
-            .setIncludedTypes(listOf("restaurant", "cafe", "bar", "tourist_attraction"))
-            .setMaxResultCount(MAX_RESULTADOS)
+        val area = CircularBounds.newInstance(LatLng(lat, lon), RADIO_EXPLORAR_METROS)
+        val peticion = SearchNearbyRequest.builder(area, CAMPOS)
+            .setIncludedTypes(TIPOS)
+            .setMaxResultCount(MAX_EXPLORAR)
             .setRankPreference(SearchNearbyRequest.RankPreference.DISTANCE)
             .build()
 
@@ -99,25 +106,102 @@ object LugaresRepositorio {
         return coroutineScope {
             encontrados.map { lugar ->
                 async {
-                    val id = lugar.id ?: return@async null
-                    val ubicacion = lugar.location ?: return@async null
-                    Lugar(
-                        id = id,
-                        nombre = lugar.displayName ?: "Lugar sin nombre",
-                        categoria = lugar.primaryTypeDisplayName ?: "Lugar",
-                        direccion = lugar.formattedAddress.orEmpty(),
-                        imagenUrl = obtenerFoto(cliente, lugar),
-                        latitud = ubicacion.latitude,
-                        longitud = ubicacion.longitude
-                    )
+                    val metadatos = guardarFoto(lugar)
+                    val imagen = if (metadatos != null) resolverFoto(cliente, metadatos) else ""
+                    aLugar(lugar, imagen)
                 }
             }.awaitAll().filterNotNull()
         }
     }
 
-    private suspend fun obtenerFoto(cliente: PlacesClient, lugar: Place): String {
-        val metadatos = lugar.photoMetadatas?.firstOrNull() ?: return ""
+    // ---------- MAPA: muchos más lugares ----------
+
+    suspend fun cargarMapa(context: Context, lat: Double, lon: Double) {
+        if (cargandoMapa) return
+        cargandoMapa = true
+        try {
+            val nuevos = buscarMapa(context.applicationContext, lat, lon)
+            if (nuevos.isNotEmpty()) lugaresMapa = nuevos
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("PlanCerca", "Error cargando el mapa: ${e.message}", e)
+        } finally {
+            cargandoMapa = false
+        }
+    }
+
+    private suspend fun buscarMapa(context: Context, lat: Double, lon: Double): List<Lugar> {
+        val cliente = obtenerCliente(context)
+        val area = CircularBounds.newInstance(LatLng(lat, lon), RADIO_MAPA_METROS)
+
+        // Una consulta por categoría, porque cada una devuelve hasta 20 resultados
+        val encontrados = coroutineScope {
+            TIPOS.map { tipo ->
+                async {
+                    try {
+                        val peticion = SearchNearbyRequest.builder(area, CAMPOS)
+                            .setIncludedTypes(listOf(tipo))
+                            .setMaxResultCount(MAX_POR_CATEGORIA)
+                            .build()
+                        cliente.searchNearby(peticion).esperar().places
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w("PlanCerca", "Falló la búsqueda de $tipo: ${e.message}")
+                        emptyList<Place>()
+                    }
+                }
+            }.awaitAll().flatten()
+        }
+
+        // Sin fotos aquí: se piden solo cuando abres el detalle de un lugar
+        return encontrados
+            .distinctBy { it.id }
+            .mapNotNull { lugar ->
+                guardarFoto(lugar)
+                aLugar(lugar, "")
+            }
+    }
+
+    // ---------- FOTO BAJO DEMANDA (para el detalle) ----------
+
+    suspend fun fotoDe(context: Context, id: String): String {
+        val metadatos = fotos[id] ?: return ""
         return try {
+            resolverFoto(obtenerCliente(context.applicationContext), metadatos)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    // ---------- AYUDAS ----------
+
+    private fun guardarFoto(lugar: Place): PhotoMetadata? {
+        val id = lugar.id ?: return null
+        val metadatos = lugar.photoMetadatas?.firstOrNull() ?: return null
+        fotos[id] = metadatos
+        return metadatos
+    }
+
+    private fun aLugar(lugar: Place, imagen: String): Lugar? {
+        val id = lugar.id ?: return null
+        val ubicacion = lugar.location ?: return null
+        return Lugar(
+            id = id,
+            nombre = lugar.displayName ?: "Lugar sin nombre",
+            categoria = lugar.primaryTypeDisplayName ?: "Lugar",
+            direccion = lugar.formattedAddress.orEmpty(),
+            imagenUrl = imagen,
+            latitud = ubicacion.latitude,
+            longitud = ubicacion.longitude
+        )
+    }
+
+    private suspend fun resolverFoto(cliente: PlacesClient, metadatos: PhotoMetadata): String =
+        try {
             val peticion = FetchResolvedPhotoUriRequest.builder(metadatos)
                 .setMaxWidth(800)
                 .setMaxHeight(800)
@@ -129,16 +213,23 @@ object LugaresRepositorio {
             Log.w("PlanCerca", "No se pudo cargar una foto: ${e.message}")
             ""
         }
+
+    private fun obtenerCliente(context: Context): PlacesClient {
+        cliente?.let { return it }
+        val clave = leerClave(context)
+        if (clave.isBlank()) throw IllegalStateException("Falta MAPS_API_KEY")
+        if (!Places.isInitialized()) {
+            Places.initializeWithNewPlacesApiEnabled(context, clave)
+        }
+        return Places.createClient(context).also { cliente = it }
     }
 
-    // Convierte las respuestas del SDK (Task) en algo que se puede esperar con coroutines
     private suspend fun <T> Task<T>.esperar(): T = suspendCancellableCoroutine { continuacion ->
         addOnSuccessListener { continuacion.resume(it) }
         addOnFailureListener { continuacion.resumeWithException(it) }
         addOnCanceledListener { continuacion.cancel() }
     }
 
-    // Lee la clave que ya está declarada en el manifiesto (viene de local.properties)
     private fun leerClave(context: Context): String =
         try {
             @Suppress("DEPRECATION")
