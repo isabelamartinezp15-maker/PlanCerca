@@ -4,12 +4,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,16 +27,19 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.google.maps.android.compose.rememberMarkerState
+import com.google.maps.android.compose.rememberUpdatedMarkerState
+import kotlinx.coroutines.launch
 
 @Composable
 fun MapaScreen(onLugarClick: (String) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val estadoUbicacion = rememberUbicacion()
     val miUbicacion = estadoUbicacion.ubicacion
 
@@ -39,21 +47,22 @@ fun MapaScreen(onLugarClick: (String) -> Unit) {
         position = CameraPosition.fromLatLngZoom(LatLng(4.6486, -74.0628), 12f)
     }
 
-    // Mueve la cámara a tu ubicación
+    var zonaNueva by remember { mutableStateOf(false) }
+
+    // Cuando llega tu ubicación: centra el mapa y carga los lugares de la zona
     LaunchedEffect(miUbicacion) {
         if (miUbicacion != null) {
-            camara.animate(
-                CameraUpdateFactory.newLatLngZoom(
-                    LatLng(miUbicacion.latitude, miUbicacion.longitude), 14f
-                )
-            )
+            val posicion = LatLng(miUbicacion.latitude, miUbicacion.longitude)
+            camara.animate(CameraUpdateFactory.newLatLngZoom(posicion, 14f))
+            LugaresRepositorio.cargarMapa(context, posicion.latitude, posicion.longitude)
+            zonaNueva = false
         }
     }
 
-    // Busca los lugares reales cercanos
-    LaunchedEffect(miUbicacion) {
-        if (miUbicacion != null) {
-            LugaresRepositorio.cargarCercanos(context, miUbicacion.latitude, miUbicacion.longitude)
+    // Muestra "Buscar en esta zona" solo cuando el usuario mueve el mapa con el dedo
+    LaunchedEffect(camara.isMoving) {
+        if (camara.isMoving && camara.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) {
+            zonaNueva = true
         }
     }
 
@@ -72,18 +81,37 @@ fun MapaScreen(onLugarClick: (String) -> Unit) {
                 myLocationButtonEnabled = estadoUbicacion.tienePermiso
             )
         ) {
-            LugaresRepositorio.lugares.forEach { lugar ->
+            LugaresRepositorio.lugaresMapa.forEach { lugar ->
                 key(lugar.id) {
                     Marker(
-                        state = rememberMarkerState(
+                        state = rememberUpdatedMarkerState(
                             position = LatLng(lugar.latitud, lugar.longitud)
                         ),
                         title = lugar.nombre,
                         snippet = "${lugar.categoria} · toca para ver más",
-                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE),
+                        icon = BitmapDescriptorFactory.defaultMarker(colorMarcador(lugar.categoria)),
                         onInfoWindowClick = { onLugarClick(lugar.id) }
                     )
                 }
+            }
+        }
+
+        if (zonaNueva || LugaresRepositorio.cargandoMapa) {
+            Button(
+                onClick = {
+                    scope.launch {
+                        val centro = camara.position.target
+                        LugaresRepositorio.cargarMapa(context, centro.latitude, centro.longitude)
+                        zonaNueva = false
+                    }
+                },
+                enabled = !LugaresRepositorio.cargandoMapa,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+            ) {
+                Text(if (LugaresRepositorio.cargandoMapa) "Buscando lugares…" else "Buscar en esta zona")
             }
         }
 
@@ -99,4 +127,12 @@ fun MapaScreen(onLugarClick: (String) -> Unit) {
             }
         }
     }
+}
+
+// Color del marcador según el tipo de lugar
+private fun colorMarcador(categoria: String): Float = when {
+    categoria.contains("caf", ignoreCase = true) -> BitmapDescriptorFactory.HUE_YELLOW
+    categoria.contains("bar", ignoreCase = true) -> BitmapDescriptorFactory.HUE_VIOLET
+    categoria.contains("restaur", ignoreCase = true) -> BitmapDescriptorFactory.HUE_ORANGE
+    else -> BitmapDescriptorFactory.HUE_AZURE
 }
