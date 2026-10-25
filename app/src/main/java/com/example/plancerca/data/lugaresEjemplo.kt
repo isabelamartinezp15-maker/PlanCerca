@@ -9,6 +9,8 @@ val lugaresEjemplo = listOf(
         "https://picsum.photos/seed/bar3/800/600", 4.6670, -74.0545),
     Lugar("4", "Casa Candelaria", "Cafetería", "Cll 12 #3-15, Bogotá",
         "https://picsum.photos/seed/cafe4/800/600", 4.5981, -74.0760),
-    Lugar("5", "Mirador del Cerro", "Plan turístico", "Vía a Monserrate, Bogotá",
-        "https://picsum.photos/seed/mirador5/800/600", 4.6055, -74.0560)
+    Lugar("5", "Mirador del Cerro", "Atracción turística", "Vía a Monserrate, Bogotá",
+        "https://picsum.photos/seed/mirador5/800/600", 4.6055, -74.0560),
+    Lugar("6", "Parque de la 93", "Parque", "Cll 93 con Cra 13, Bogotá",
+        "https://picsum.photos/seed/parque6/800/600", 4.6767, -74.0485)
 )

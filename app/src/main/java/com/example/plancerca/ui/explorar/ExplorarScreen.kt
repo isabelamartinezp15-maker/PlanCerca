@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
@@ -48,19 +51,40 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.example.plancerca.data.FavoritosRepositorio
 import com.example.plancerca.data.Lugar
 import com.example.plancerca.data.LugaresRepositorio
 import com.example.plancerca.ui.ubicacion.distanciaMetros
 import com.example.plancerca.ui.ubicacion.formatearDistancia
 import com.example.plancerca.ui.ubicacion.rememberUbicacion
 
-private const val TODAS = "Todos"
+// Botones de categoría: cada uno reconoce la categoría que devuelve Google
+private class Filtro(val etiqueta: String, val coincide: (String) -> Boolean)
+
+private val FILTROS = listOf(
+    Filtro("Todos") { true },
+    Filtro("Restaurantes") { it.contains("restaur", ignoreCase = true) },
+    Filtro("Cafeterías") { it.contains("caf", ignoreCase = true) },
+    Filtro("Bares") {
+        it.equals("bar", ignoreCase = true) ||
+                it.startsWith("bar ", ignoreCase = true) ||
+                it.contains("pub", ignoreCase = true)
+    },
+    Filtro("Parques") {
+        it.contains("parque", ignoreCase = true) || it.contains("park", ignoreCase = true)
+    },
+    Filtro("Atracciones") {
+        it.contains("atracci", ignoreCase = true) ||
+                it.contains("turíst", ignoreCase = true) ||
+                it.contains("turist", ignoreCase = true)
+    }
+)
 
 @Composable
 fun ExplorarScreen(onLugarClick: (String) -> Unit) {
     val context = LocalContext.current
     var busqueda by rememberSaveable { mutableStateOf("") }
-    var categoriaSeleccionada by rememberSaveable { mutableStateOf(TODAS) }
+    var filtroSeleccionado by rememberSaveable { mutableStateOf(FILTROS.first().etiqueta) }
 
     val estadoUbicacion = rememberUbicacion()
     val miUbicacion = estadoUbicacion.ubicacion
@@ -72,13 +96,11 @@ fun ExplorarScreen(onLugarClick: (String) -> Unit) {
         }
     }
 
-    val lugares = LugaresRepositorio.lugares
-    val categorias = listOf(TODAS) + lugares.map { it.categoria }.distinct()
+    val filtroActual = FILTROS.firstOrNull { it.etiqueta == filtroSeleccionado } ?: FILTROS.first()
 
-    val lugaresFiltrados = lugares.filter { lugar ->
-        val coincideCategoria = categoriaSeleccionada == TODAS || lugar.categoria == categoriaSeleccionada
-        val coincideNombre = lugar.nombre.contains(busqueda.trim(), ignoreCase = true)
-        coincideCategoria && coincideNombre
+    val lugaresFiltrados = LugaresRepositorio.lugares.filter { lugar ->
+        filtroActual.coincide(lugar.categoria) &&
+                lugar.nombre.contains(busqueda.trim(), ignoreCase = true)
     }
 
     val lugaresOrdenados = if (miUbicacion != null) {
@@ -101,7 +123,7 @@ fun ExplorarScreen(onLugarClick: (String) -> Unit) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = if (miUbicacion != null) "Ordenados por cercanía" else "Lugares cerca de ti",
+                    text = "Lugares cerca de ti",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -189,11 +211,11 @@ fun ExplorarScreen(onLugarClick: (String) -> Unit) {
         }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(categorias) { categoria ->
+                items(FILTROS) { filtro ->
                     FilterChip(
-                        selected = categoria == categoriaSeleccionada,
-                        onClick = { categoriaSeleccionada = categoria },
-                        label = { Text(categoria) },
+                        selected = filtro.etiqueta == filtroSeleccionado,
+                        onClick = { filtroSeleccionado = filtro.etiqueta },
+                        label = { Text(filtro.etiqueta) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
                             selectedLabelColor = Color.White
@@ -235,6 +257,8 @@ fun LugarCard(
     modifier: Modifier = Modifier,
     distancia: String? = null
 ) {
+    val esFavorito = FavoritosRepositorio.esFavorito(lugar.id)
+
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().height(260.dp),
@@ -261,6 +285,19 @@ fun LugarCard(
                         )
                     )
             )
+            IconButton(
+                onClick = { FavoritosRepositorio.alternar(lugar) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = if (esFavorito) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (esFavorito) "Quitar de favoritos" else "Guardar en favoritos",
+                    tint = if (esFavorito) MaterialTheme.colorScheme.primary else Color.White
+                )
+            }
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
             ) {
