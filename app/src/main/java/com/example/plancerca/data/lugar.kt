@@ -7,5 +7,6 @@ data class Lugar(
     val direccion: String,
     val imagenUrl: String,
     val latitud: Double,
-    val longitud: Double
+    val longitud: Double,
+    val tipo: String = ""
 )
