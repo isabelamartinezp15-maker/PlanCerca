@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,24 +59,30 @@ import com.example.plancerca.ui.ubicacion.distanciaMetros
 import com.example.plancerca.ui.ubicacion.formatearDistancia
 import com.example.plancerca.ui.ubicacion.rememberUbicacion
 
-// Botones de categoría: cada uno reconoce la categoría que devuelve Google
-private class Filtro(val etiqueta: String, val coincide: (String) -> Boolean)
+// Botones de categoría. "tipo" es el tipo con el que se buscó el lugar en Google;
+// "texto" sirve de respaldo para los lugares de ejemplo, que no tienen tipo.
+private class Filtro(
+    val etiqueta: String,
+    val tipo: String?,
+    val texto: (String) -> Boolean
+) {
+    fun coincide(lugar: Lugar): Boolean = when {
+        tipo == null -> true
+        lugar.tipo.isNotBlank() -> lugar.tipo == tipo
+        else -> texto(lugar.categoria)
+    }
+}
 
 private val FILTROS = listOf(
-    Filtro("Todos") { true },
-    Filtro("Restaurantes") { it.contains("restaur", ignoreCase = true) },
-    Filtro("Cafeterías") { it.contains("caf", ignoreCase = true) },
-    Filtro("Bares") {
-        it.equals("bar", ignoreCase = true) ||
-                it.startsWith("bar ", ignoreCase = true) ||
-                it.contains("pub", ignoreCase = true)
-    },
-    Filtro("Parques") {
+    Filtro("Todos", null) { true },
+    Filtro("Restaurantes", "restaurant") { it.contains("restaur", ignoreCase = true) },
+    Filtro("Cafeterías", "cafe") { it.contains("caf", ignoreCase = true) },
+    Filtro("Bares", "bar") { it.equals("bar", ignoreCase = true) || it.contains("pub", ignoreCase = true) },
+    Filtro("Parques", "park") {
         it.contains("parque", ignoreCase = true) || it.contains("park", ignoreCase = true)
     },
-    Filtro("Atracciones") {
-        it.contains("atracci", ignoreCase = true) ||
-                it.contains("turíst", ignoreCase = true) ||
+    Filtro("Atracciones", "tourist_attraction") {
+        it.contains("atracci", ignoreCase = true) || it.contains("turíst", ignoreCase = true) ||
                 it.contains("turist", ignoreCase = true)
     }
 )
@@ -99,7 +106,7 @@ fun ExplorarScreen(onLugarClick: (String) -> Unit) {
     val filtroActual = FILTROS.firstOrNull { it.etiqueta == filtroSeleccionado } ?: FILTROS.first()
 
     val lugaresFiltrados = LugaresRepositorio.lugares.filter { lugar ->
-        filtroActual.coincide(lugar.categoria) &&
+        filtroActual.coincide(lugar) &&
                 lugar.nombre.contains(busqueda.trim(), ignoreCase = true)
     }
 
@@ -257,7 +264,16 @@ fun LugarCard(
     modifier: Modifier = Modifier,
     distancia: String? = null
 ) {
+    val context = LocalContext.current
     val esFavorito = FavoritosRepositorio.esFavorito(lugar.id)
+
+    // La foto se pide solo cuando la tarjeta aparece en pantalla
+    var foto by remember(lugar.id) { mutableStateOf(lugar.imagenUrl) }
+    LaunchedEffect(lugar.id) {
+        if (foto.isBlank()) {
+            foto = LugaresRepositorio.fotoDe(context, lugar.id)
+        }
+    }
 
     Card(
         onClick = onClick,
@@ -271,7 +287,7 @@ fun LugarCard(
                 .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
         ) {
             AsyncImage(
-                model = lugar.imagenUrl.ifBlank { null },
+                model = foto.ifBlank { null },
                 contentDescription = lugar.nombre,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -286,7 +302,7 @@ fun LugarCard(
                     )
             )
             IconButton(
-                onClick = { FavoritosRepositorio.alternar(lugar) },
+                onClick = { FavoritosRepositorio.alternar(lugar.copy(imagenUrl = foto)) },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(12.dp)

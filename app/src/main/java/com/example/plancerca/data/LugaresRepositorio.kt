@@ -26,7 +26,7 @@ import kotlin.coroutines.resumeWithException
 
 object LugaresRepositorio {
 
-    // Lista de Explorar: los más cercanos a ti
+    // Lista de Explorar: los más cercanos de cada categoría
     var lugares by mutableStateOf<List<Lugar>>(lugaresEjemplo)
         private set
 
@@ -46,14 +46,18 @@ object LugaresRepositorio {
     private var ultimaLon = 0.0
     private var cliente: PlacesClient? = null
 
-    // Guarda la referencia de la foto de cada lugar para pedirla solo cuando se abre el detalle
+    // Referencia de la foto de cada lugar, y las fotos ya resueltas
     private val fotos = mutableMapOf<String, PhotoMetadata>()
+    private val fotosResueltas = mutableMapOf<String, String>()
 
     private const val RADIO_EXPLORAR_METROS = 2000.0
-    private const val MAX_EXPLORAR = 12
+    private const val POR_CATEGORIA_EXPLORAR = 6
     private const val RADIO_MAPA_METROS = 2500.0
-    private const val MAX_POR_CATEGORIA = 20
-    private val TIPOS = listOf("restaurant", "cafe", "bar", "tourist_attraction")
+    private const val POR_CATEGORIA_MAPA = 20
+
+    // Los tipos específicos van primero: si un lugar es bar y restaurante a la vez,
+    // aparece como bar, que es la categoría más específica.
+    private val TIPOS = listOf("park", "bar", "cafe", "tourist_attraction", "restaurant")
 
     private val CAMPOS = listOf(
         Place.Field.ID,
@@ -64,7 +68,7 @@ object LugaresRepositorio {
         Place.Field.PHOTO_METADATAS
     )
 
-    // ---------- EXPLORAR: los más cercanos ----------
+    // ---------- EXPLORAR ----------
 
     suspend fun cargarCercanos(context: Context, lat: Double, lon: Double) {
         if (cargando) return
@@ -76,7 +80,10 @@ object LugaresRepositorio {
         cargando = true
         mensaje = null
         try {
-            val nuevos = buscarCercanos(context.applicationContext, lat, lon)
+            val nuevos = buscarPorTipos(
+                context.applicationContext, lat, lon,
+                RADIO_EXPLORAR_METROS, POR_CATEGORIA_EXPLORAR, lanzarSiFallanTodas = true
+            )
             lugares = nuevos
             datosReales = true
             ultimaLat = lat
@@ -92,35 +99,16 @@ object LugaresRepositorio {
         }
     }
 
-    private suspend fun buscarCercanos(context: Context, lat: Double, lon: Double): List<Lugar> {
-        val cliente = obtenerCliente(context)
-        val area = CircularBounds.newInstance(LatLng(lat, lon), RADIO_EXPLORAR_METROS)
-        val peticion = SearchNearbyRequest.builder(area, CAMPOS)
-            .setIncludedTypes(TIPOS)
-            .setMaxResultCount(MAX_EXPLORAR)
-            .setRankPreference(SearchNearbyRequest.RankPreference.DISTANCE)
-            .build()
-
-        val encontrados = cliente.searchNearby(peticion).esperar().places
-
-        return coroutineScope {
-            encontrados.map { lugar ->
-                async {
-                    val metadatos = guardarFoto(lugar)
-                    val imagen = if (metadatos != null) resolverFoto(cliente, metadatos) else ""
-                    aLugar(lugar, imagen)
-                }
-            }.awaitAll().filterNotNull()
-        }
-    }
-
-    // ---------- MAPA: muchos más lugares ----------
+    // ---------- MAPA ----------
 
     suspend fun cargarMapa(context: Context, lat: Double, lon: Double) {
         if (cargandoMapa) return
         cargandoMapa = true
         try {
-            val nuevos = buscarMapa(context.applicationContext, lat, lon)
+            val nuevos = buscarPorTipos(
+                context.applicationContext, lat, lon,
+                RADIO_MAPA_METROS, POR_CATEGORIA_MAPA, lanzarSiFallanTodas = false
+            )
             if (nuevos.isNotEmpty()) lugaresMapa = nuevos
         } catch (e: CancellationException) {
             throw e
@@ -131,45 +119,66 @@ object LugaresRepositorio {
         }
     }
 
-    private suspend fun buscarMapa(context: Context, lat: Double, lon: Double): List<Lugar> {
-        val cliente = obtenerCliente(context)
-        val area = CircularBounds.newInstance(LatLng(lat, lon), RADIO_MAPA_METROS)
+    // ---------- BÚSQUEDA: una consulta por categoría ----------
 
-        // Una consulta por categoría, porque cada una devuelve hasta 20 resultados
+    private suspend fun buscarPorTipos(
+        context: Context,
+        lat: Double,
+        lon: Double,
+        radio: Double,
+        porTipo: Int,
+        lanzarSiFallanTodas: Boolean
+    ): List<Lugar> {
+        val cliente = obtenerCliente(context)
+        val area = CircularBounds.newInstance(LatLng(lat, lon), radio)
+
+        var fallos = 0
+        var ultimoError: Exception? = null
+
         val encontrados = coroutineScope {
             TIPOS.map { tipo ->
                 async {
                     try {
                         val peticion = SearchNearbyRequest.builder(area, CAMPOS)
                             .setIncludedTypes(listOf(tipo))
-                            .setMaxResultCount(MAX_POR_CATEGORIA)
+                            .setMaxResultCount(porTipo)
+                            .setRankPreference(SearchNearbyRequest.RankPreference.DISTANCE)
                             .build()
-                        cliente.searchNearby(peticion).esperar().places
+                        cliente.searchNearby(peticion).esperar().places.map { tipo to it }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         Log.w("PlanCerca", "Falló la búsqueda de $tipo: ${e.message}")
-                        emptyList<Place>()
+                        fallos++
+                        ultimoError = e
+                        emptyList<Pair<String, Place>>()
                     }
                 }
             }.awaitAll().flatten()
         }
 
-        // Sin fotos aquí: se piden solo cuando abres el detalle de un lugar
+        if (lanzarSiFallanTodas && fallos == TIPOS.size) {
+            throw ultimoError ?: IllegalStateException("Falló la búsqueda")
+        }
+
+        // Las fotos NO se piden aquí: se piden cuando cada tarjeta aparece en pantalla
         return encontrados
-            .distinctBy { it.id }
-            .mapNotNull { lugar ->
+            .distinctBy { it.second.id }
+            .mapNotNull { (tipo, lugar) ->
                 guardarFoto(lugar)
-                aLugar(lugar, "")
+                aLugar(lugar, tipo)
             }
     }
 
-    // ---------- FOTO BAJO DEMANDA (para el detalle) ----------
+    // ---------- FOTO BAJO DEMANDA ----------
 
     suspend fun fotoDe(context: Context, id: String): String {
+        fotosResueltas[id]?.let { return it }
         val metadatos = fotos[id] ?: return ""
         return try {
-            resolverFoto(obtenerCliente(context.applicationContext), metadatos)
+            val url = resolverFoto(obtenerCliente(context.applicationContext), metadatos)
+            if (url.isNotBlank()) fotosResueltas[id] = url
+            url
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -179,14 +188,13 @@ object LugaresRepositorio {
 
     // ---------- AYUDAS ----------
 
-    private fun guardarFoto(lugar: Place): PhotoMetadata? {
-        val id = lugar.id ?: return null
-        val metadatos = lugar.photoMetadatas?.firstOrNull() ?: return null
+    private fun guardarFoto(lugar: Place) {
+        val id = lugar.id ?: return
+        val metadatos = lugar.photoMetadatas?.firstOrNull() ?: return
         fotos[id] = metadatos
-        return metadatos
     }
 
-    private fun aLugar(lugar: Place, imagen: String): Lugar? {
+    private fun aLugar(lugar: Place, tipo: String): Lugar? {
         val id = lugar.id ?: return null
         val ubicacion = lugar.location ?: return null
         return Lugar(
@@ -194,9 +202,10 @@ object LugaresRepositorio {
             nombre = lugar.displayName ?: "Lugar sin nombre",
             categoria = lugar.primaryTypeDisplayName ?: "Lugar",
             direccion = lugar.formattedAddress.orEmpty(),
-            imagenUrl = imagen,
+            imagenUrl = "",
             latitud = ubicacion.latitude,
-            longitud = ubicacion.longitude
+            longitud = ubicacion.longitude,
+            tipo = tipo
         )
     }
 
