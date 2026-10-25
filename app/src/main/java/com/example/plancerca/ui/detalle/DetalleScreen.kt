@@ -23,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -44,14 +46,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.example.plancerca.data.FavoritosRepositorio
 import com.example.plancerca.data.Lugar
 import com.example.plancerca.data.LugaresRepositorio
 
 @Composable
 fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
-    // Busca el lugar en Explorar y, si no está, en los lugares del Mapa
+    // Busca el lugar en Explorar, en el Mapa y, si no está, en los favoritos guardados
     val lugar = LugaresRepositorio.lugares.firstOrNull { it.id == lugarId }
         ?: LugaresRepositorio.lugaresMapa.firstOrNull { it.id == lugarId }
+        ?: FavoritosRepositorio.favoritos.firstOrNull { it.id == lugarId }
     val context = LocalContext.current
 
     if (lugar == null) {
@@ -59,6 +63,8 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
             Text("No encontramos este lugar", color = MaterialTheme.colorScheme.primary)
         }
     } else {
+        val esFavorito = FavoritosRepositorio.esFavorito(lugar.id)
+
         // Los lugares del mapa no traen foto: se pide al abrir el detalle
         var foto by remember(lugar.id) { mutableStateOf(lugar.imagenUrl) }
         LaunchedEffect(lugar.id) {
@@ -87,6 +93,7 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
                 IconButton(
                     onClick = onBack,
                     modifier = Modifier
+                        .align(Alignment.TopStart)
                         .statusBarsPadding()
                         .padding(12.dp)
                         .background(Color.Black.copy(alpha = 0.4f), CircleShape)
@@ -95,6 +102,20 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Volver",
                         tint = Color.White
+                    )
+                }
+                IconButton(
+                    onClick = { FavoritosRepositorio.alternar(lugar.copy(imagenUrl = foto)) },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(12.dp)
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (esFavorito) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = if (esFavorito) "Quitar de favoritos" else "Guardar en favoritos",
+                        tint = if (esFavorito) MaterialTheme.colorScheme.primary else Color.White
                     )
                 }
             }
