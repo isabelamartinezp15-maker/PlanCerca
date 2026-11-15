@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog // NUEVO
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,8 +37,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton // NUEVO
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState // NUEVO
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,9 +58,12 @@ import coil3.compose.AsyncImage
 import com.example.plancerca.data.FavoritosRepositorio
 import com.example.plancerca.data.Lugar
 import com.example.plancerca.data.LugaresRepositorio
+import com.example.plancerca.data.supabase // NUEVO
 import com.example.plancerca.ui.ubicacion.distanciaMetros
 import com.example.plancerca.ui.ubicacion.formatearDistancia
 import com.example.plancerca.ui.ubicacion.rememberUbicacion
+import io.github.jan.supabase.auth.auth // NUEVO
+import io.github.jan.supabase.auth.status.SessionStatus // NUEVO
 
 // Botones de categoría. "tipo" es el tipo con el que se buscó el lugar en Google;
 // "texto" sirve de respaldo para los lugares de ejemplo, que no tienen tipo.
@@ -88,7 +94,10 @@ private val FILTROS = listOf(
 )
 
 @Composable
-fun ExplorarScreen(onLugarClick: (String) -> Unit) {
+fun ExplorarScreen(
+    onLugarClick: (String) -> Unit,
+    onIrACuenta: () -> Unit = {} // NUEVO
+) {
     val context = LocalContext.current
     var busqueda by rememberSaveable { mutableStateOf("") }
     var filtroSeleccionado by rememberSaveable { mutableStateOf(FILTROS.first().etiqueta) }
@@ -250,7 +259,8 @@ fun ExplorarScreen(onLugarClick: (String) -> Unit) {
                 LugarCard(
                     lugar = lugar,
                     distancia = distancia,
-                    onClick = { onLugarClick(lugar.id) }
+                    onClick = { onLugarClick(lugar.id) },
+                    onIrACuenta = onIrACuenta // NUEVO
                 )
             }
         }
@@ -262,10 +272,18 @@ fun LugarCard(
     lugar: Lugar,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    distancia: String? = null
+    distancia: String? = null,
+    onIrACuenta: () -> Unit = {} // NUEVO
 ) {
     val context = LocalContext.current
-    val esFavorito = FavoritosRepositorio.esFavorito(lugar.id)
+
+    // NUEVO: ¿hay sesión iniciada? y si hay que mostrar el aviso
+    val estadoSesion by supabase.auth.sessionStatus.collectAsState()
+    val haySesion = estadoSesion is SessionStatus.Authenticated
+    var mostrarAviso by remember { mutableStateOf(false) }
+
+    // CAMBIO: sin sesión el corazón siempre se ve vacío
+    val esFavorito = haySesion && FavoritosRepositorio.esFavorito(lugar.id)
 
     // La foto se pide solo cuando la tarjeta aparece en pantalla
     var foto by remember(lugar.id) { mutableStateOf(lugar.imagenUrl) }
@@ -302,7 +320,14 @@ fun LugarCard(
                     )
             )
             IconButton(
-                onClick = { FavoritosRepositorio.alternar(lugar.copy(imagenUrl = foto)) },
+                // CAMBIO: solo con sesión se guarda; si no, sale el aviso
+                onClick = {
+                    if (haySesion) {
+                        FavoritosRepositorio.alternar(lugar.copy(imagenUrl = foto))
+                    } else {
+                        mostrarAviso = true
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(12.dp)
@@ -363,5 +388,27 @@ fun LugarCard(
                 }
             }
         }
+    }
+
+    // NUEVO: aviso para quien intenta guardar un favorito sin sesión
+    if (mostrarAviso) {
+        AlertDialog(
+            onDismissRequest = { mostrarAviso = false },
+            title = { Text("Inicia sesión") },
+            text = { Text("Para guardar favoritos necesitas iniciar sesión.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    mostrarAviso = false
+                    onIrACuenta()
+                }) {
+                    Text("Ir a Cuenta")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarAviso = false }) {
+                    Text("Ahora no")
+                }
+            }
+        )
     }
 }
