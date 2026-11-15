@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.RateReview
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,8 +36,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,9 +57,16 @@ import com.example.plancerca.data.FavoritosRepositorio
 import com.example.plancerca.data.Lugar
 import com.example.plancerca.data.LugaresRepositorio
 import com.example.plancerca.data.ResenasRepositorio
+import com.example.plancerca.data.supabase // NUEVO
+import io.github.jan.supabase.auth.auth // NUEVO
+import io.github.jan.supabase.auth.status.SessionStatus // NUEVO
 
 @Composable
-fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
+fun DetalleScreen(
+    lugarId: String,
+    onBack: () -> Unit,
+    onIrACuenta: () -> Unit // NUEVO
+) {
     // Busca el lugar en Explorar, en el Mapa y, si no está, en los favoritos guardados
     val lugar = LugaresRepositorio.lugares.firstOrNull { it.id == lugarId }
         ?: LugaresRepositorio.lugaresMapa.firstOrNull { it.id == lugarId }
@@ -72,12 +82,20 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
         val resenas = ResenasRepositorio.deLugar(lugar.id)
         var mostrarFormulario by rememberSaveable { mutableStateOf(false) }
 
+        // NUEVO: ¿hay sesión iniciada? y aviso para pedir que inicie sesión
+        val estadoSesion by supabase.auth.sessionStatus.collectAsState()
+        val haySesion = estadoSesion is SessionStatus.Authenticated
+        var avisoSesion by rememberSaveable { mutableStateOf<String?>(null) }
+
         // Los lugares del mapa no traen foto: se pide al abrir el detalle
         var foto by remember(lugar.id) { mutableStateOf(lugar.imagenUrl) }
         LaunchedEffect(lugar.id) {
             if (foto.isBlank()) {
                 foto = LugaresRepositorio.fotoDe(context, lugar.id)
             }
+        }
+        LaunchedEffect(lugar.id) {
+            ResenasRepositorio.recargar()
         }
 
         Column(
@@ -112,7 +130,14 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
                     )
                 }
                 IconButton(
-                    onClick = { FavoritosRepositorio.alternar(lugar.copy(imagenUrl = foto)) },
+                    // NUEVO: solo con sesión se guarda el favorito
+                    onClick = {
+                        if (haySesion) {
+                            FavoritosRepositorio.alternar(lugar.copy(imagenUrl = foto))
+                        } else {
+                            avisoSesion = "guardar favoritos"
+                        }
+                    },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .statusBarsPadding()
@@ -175,7 +200,14 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
                     Text("Cómo llegar")
                 }
                 OutlinedButton(
-                    onClick = { mostrarFormulario = true },
+                    // NUEVO: solo con sesión se abre el formulario de reseña
+                    onClick = {
+                        if (haySesion) {
+                            mostrarFormulario = true
+                        } else {
+                            avisoSesion = "dejar una reseña"
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp)
@@ -195,7 +227,7 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "Las reseñas se guardan en este celular",
+                    text = "Las reseñas las ve todo el mundo",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -226,6 +258,28 @@ fun DetalleScreen(lugarId: String, onBack: () -> Unit) {
             FormularioResena(
                 lugarId = lugar.id,
                 alCerrar = { mostrarFormulario = false }
+            )
+        }
+
+        // NUEVO: aviso para quien intenta guardar o reseñar sin sesión
+        avisoSesion?.let { accion ->
+            AlertDialog(
+                onDismissRequest = { avisoSesion = null },
+                title = { Text("Inicia sesión") },
+                text = { Text("Para $accion necesitas iniciar sesión.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        avisoSesion = null
+                        onIrACuenta()
+                    }) {
+                        Text("Ir a Cuenta")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { avisoSesion = null }) {
+                        Text("Ahora no")
+                    }
+                }
             )
         }
     }

@@ -95,7 +95,8 @@ fun Estrellas(
 
 @Composable
 fun TarjetaResena(resena: Resena, alEliminar: () -> Unit) {
-    val formato = remember { SimpleDateFormat("d MMM yyyy", Locale("es")) }
+    // CAMBIO: forma nueva de crear el idioma (arregla el aviso de "deprecated")
+    val formato = remember { SimpleDateFormat("d MMM yyyy", Locale.forLanguageTag("es")) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -118,12 +119,15 @@ fun TarjetaResena(resena: Resena, alEliminar: () -> Unit) {
                         color = MaterialTheme.colorScheme.secondary
                     )
                 }
-                IconButton(onClick = alEliminar) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Eliminar reseña",
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
+                // NUEVO: el botón de eliminar solo aparece en tus propias reseñas
+                if (ResenasRepositorio.esMia(resena)) {
+                    IconButton(onClick = alEliminar) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Eliminar reseña",
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                 }
             }
             Estrellas(calificacion = resena.calificacion, modifier = Modifier.padding(top = 4.dp))
@@ -140,9 +144,10 @@ fun TarjetaResena(resena: Resena, alEliminar: () -> Unit) {
                     modifier = Modifier.padding(top = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(resena.fotos) { ruta ->
+                    items(resena.fotos) { enlace ->
                         AsyncImage(
-                            model = File(ruta),
+                            // CAMBIO: ahora la foto es un enlace de internet, no un archivo del celular
+                            model = enlace,
                             contentDescription = "Foto de la reseña",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -161,7 +166,7 @@ fun TarjetaResena(resena: Resena, alEliminar: () -> Unit) {
 fun FormularioResena(lugarId: String, alCerrar: () -> Unit) {
     val context = LocalContext.current
 
-    var autor by rememberSaveable { mutableStateOf("") }
+    // CAMBIO: se quitó el campo del nombre; se usa el nombre de la cuenta
     var calificacion by rememberSaveable { mutableStateOf(0) }
     var comentario by rememberSaveable { mutableStateOf("") }
     var fotos by remember { mutableStateOf(listOf<String>()) }
@@ -231,13 +236,13 @@ fun FormularioResena(lugarId: String, alCerrar: () -> Unit) {
             )
             Estrellas(calificacion = calificacion, alSeleccionar = { calificacion = it })
 
-            OutlinedTextField(
-                value = autor,
-                onValueChange = { autor = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Tu nombre (opcional)") },
-                singleLine = true
+            // NUEVO: aclara con qué nombre se publica
+            Text(
+                text = "Se publicará con el nombre de tu cuenta.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
             )
+
             OutlinedTextField(
                 value = comentario,
                 onValueChange = { comentario = it },
@@ -336,7 +341,8 @@ fun FormularioResena(lugarId: String, alCerrar: () -> Unit) {
                             Resena(
                                 id = UUID.randomUUID().toString(),
                                 lugarId = lugarId,
-                                autor = autor.trim().ifBlank { "Visitante" },
+                                // CAMBIO: el repositorio usa el nombre de la cuenta
+                                autor = "Visitante",
                                 calificacion = calificacion,
                                 comentario = comentario.trim(),
                                 fotos = fotos,
