@@ -64,6 +64,9 @@ import com.example.plancerca.ui.ubicacion.formatearDistancia
 import com.example.plancerca.ui.ubicacion.rememberUbicacion
 import io.github.jan.supabase.auth.auth // NUEVO
 import io.github.jan.supabase.auth.status.SessionStatus // NUEVO
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.ui.draw.clip
+
 
 // Botones de categoría. "tipo" es el tipo con el que se buscó el lugar en Google;
 // "texto" sirve de respaldo para los lugares de ejemplo, que no tienen tipo.
