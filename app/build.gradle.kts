@@ -28,6 +28,10 @@ android {
             localFile.inputStream().use { localProps.load(it) }
         }
         manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")
+
+        // NUEVO: claves de Supabase, también desde local.properties
+        buildConfigField("String", "SUPABASE_URL", "\"${localProps.getProperty("SUPABASE_URL", "")}\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"${localProps.getProperty("SUPABASE_KEY", "")}\"")
     }
 
     buildTypes {
@@ -45,6 +49,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // NUEVO: permite leer SUPABASE_URL y SUPABASE_KEY desde el código
+        buildConfig = true
     }
 }
 
