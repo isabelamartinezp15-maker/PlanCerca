@@ -127,7 +127,11 @@ fun PlanCercaApp() {
                     entry<Favoritos> {
                         FavoritosScreen(
                             onLugarClick = { id -> backStack.add(DetalleLugar(id)) },
-                            onIrACuenta = irACuenta
+                            onIrACuenta = irACuenta,
+                            onExplorar = {
+                                backStack.clear()
+                                backStack.add(Explorar)
+                            }
                         )
                     }
                     entry<Cuenta> {
