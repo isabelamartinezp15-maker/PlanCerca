@@ -23,8 +23,9 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place // NUEVO
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog // NUEVO
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,10 +38,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton // NUEVO
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState // NUEVO
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip // NUEVO
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -58,15 +60,12 @@ import coil3.compose.AsyncImage
 import com.example.plancerca.data.FavoritosRepositorio
 import com.example.plancerca.data.Lugar
 import com.example.plancerca.data.LugaresRepositorio
-import com.example.plancerca.data.supabase // NUEVO
+import com.example.plancerca.data.supabase
 import com.example.plancerca.ui.ubicacion.distanciaMetros
 import com.example.plancerca.ui.ubicacion.formatearDistancia
 import com.example.plancerca.ui.ubicacion.rememberUbicacion
-import io.github.jan.supabase.auth.auth // NUEVO
-import io.github.jan.supabase.auth.status.SessionStatus // NUEVO
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.ui.draw.clip
-
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.SessionStatus
 
 // Botones de categoría. "tipo" es el tipo con el que se buscó el lugar en Google;
 // "texto" sirve de respaldo para los lugares de ejemplo, que no tienen tipo.
@@ -99,7 +98,7 @@ private val FILTROS = listOf(
 @Composable
 fun ExplorarScreen(
     onLugarClick: (String) -> Unit,
-    onIrACuenta: () -> Unit = {} // NUEVO
+    onIrACuenta: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var busqueda by rememberSaveable { mutableStateOf("") }
@@ -134,18 +133,38 @@ fun ExplorarScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column {
-                Text(
-                    text = "Descubre",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Lugares cerca de ti",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+            // NUEVO: el logo de PlanCerca junto al título
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Place,
+                        contentDescription = "Logo de PlanCerca",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = "Descubre",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Lugares cerca de ti",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
             }
         }
         if (!estadoUbicacion.tienePermiso) {
@@ -263,7 +282,7 @@ fun ExplorarScreen(
                     lugar = lugar,
                     distancia = distancia,
                     onClick = { onLugarClick(lugar.id) },
-                    onIrACuenta = onIrACuenta // NUEVO
+                    onIrACuenta = onIrACuenta
                 )
             }
         }
@@ -276,16 +295,16 @@ fun LugarCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     distancia: String? = null,
-    onIrACuenta: () -> Unit = {} // NUEVO
+    onIrACuenta: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
-    // NUEVO: ¿hay sesión iniciada? y si hay que mostrar el aviso
+    // ¿Hay sesión iniciada? y si hay que mostrar el aviso
     val estadoSesion by supabase.auth.sessionStatus.collectAsState()
     val haySesion = estadoSesion is SessionStatus.Authenticated
     var mostrarAviso by remember { mutableStateOf(false) }
 
-    // CAMBIO: sin sesión el corazón siempre se ve vacío
+    // Sin sesión el corazón siempre se ve vacío
     val esFavorito = haySesion && FavoritosRepositorio.esFavorito(lugar.id)
 
     // La foto se pide solo cuando la tarjeta aparece en pantalla
@@ -323,7 +342,7 @@ fun LugarCard(
                     )
             )
             IconButton(
-                // CAMBIO: solo con sesión se guarda; si no, sale el aviso
+                // Solo con sesión se guarda; si no, sale el aviso
                 onClick = {
                     if (haySesion) {
                         FavoritosRepositorio.alternar(lugar.copy(imagenUrl = foto))
@@ -393,7 +412,7 @@ fun LugarCard(
         }
     }
 
-    // NUEVO: aviso para quien intenta guardar un favorito sin sesión
+    // Aviso para quien intenta guardar un favorito sin sesión
     if (mostrarAviso) {
         AlertDialog(
             onDismissRequest = { mostrarAviso = false },
